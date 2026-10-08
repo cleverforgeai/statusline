@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.bak
+.statusline-cache/
+.DS_Store
