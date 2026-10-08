@@ -32,7 +32,7 @@ Get-Remote 'skill/SKILL.md' (Join-Path $Dest 'skills\statusline\SKILL.md')
 
 $cfg = Join-Path $Dest 'statusline.config.json'
 if (-not (Test-Path $cfg)) {
-  [System.IO.File]::WriteAllText($cfg, '{ "apps": {}, "show_github": true, "show_tasks": true, "show_memory": false, "two_lines": true, "fun_line": true, "animate": true, "sprite": "car", "sprite_chosen": false, "setup_done": false, "flags": [], "compact_alert": true, "fav_reminder": true, "org": "", "life_source": "context" }', (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::WriteAllText($cfg, '{ "apps": {}, "preset": "standard", "parts": {}, "sprite": "car", "sprite_chosen": false, "setup_done": false, "flags": [], "org": "", "life_source": "context" }', (New-Object System.Text.UTF8Encoding($false)))
 }
 
 $cmd = 'bash ' + ($Dest -replace '\\','/') + '/statusline-command.sh'

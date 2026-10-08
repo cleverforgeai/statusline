@@ -38,18 +38,12 @@ fetch "skill/SKILL.md" "$DEST/skills/statusline/SKILL.md"
 [ -f "$DEST/statusline.config.json" ] || cat > "$DEST/statusline.config.json" <<'EOF'
 {
   "apps": {},
-  "show_github": true,
-  "show_tasks": true,
-  "show_memory": false,
-  "two_lines": true,
-  "fun_line": true,
-  "animate": true,
+  "preset": "standard",
+  "parts": {},
   "sprite": "car",
   "sprite_chosen": false,
   "setup_done": false,
   "flags": [],
-  "compact_alert": true,
-  "fav_reminder": true,
   "org": "",
   "life_source": "context"
 }

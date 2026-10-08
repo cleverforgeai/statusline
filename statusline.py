@@ -19,7 +19,7 @@ import sys, json, subprocess, os, re, datetime, time, hashlib, math
 
 __author__ = 'CleverForge'
 __org__ = 'CleverForgeAI'
-__version__ = '1.2.0'
+__version__ = '1.3.0'
 __repo__ = 'github.com/cleverforgeai/statusline'
 __made_by__ = 'Made by CleverForge'
 
@@ -203,6 +203,46 @@ def cleanup_cache():
         pass
 
 
+# ---------------------------------------------------------------- what to show
+PARTS = ['app', 'branch', 'diff', 'github', 'model', 'context', 'tokens', 'cost', 'time',
+         'tasks', 'org', 'flags', 'mood', 'animation', 'heart', 'alerts']
+PART_DESC = {
+    'app': 'Project name and phase (MyApp:feature)', 'branch': 'Git branch',
+    'diff': 'Lines added and removed (+42 -7)', 'github': 'GitHub repo, sync state and PR',
+    'model': 'Claude model', 'context': 'Memory bar (how full the context is)',
+    'tokens': 'Token count', 'cost': 'Session cost', 'time': 'Session time',
+    'tasks': 'Task list and progress', 'org': 'Organization name', 'flags': 'Country flags',
+    'mood': 'Mood of the day', 'animation': 'Your animation', 'heart': 'Heart line (memory left)',
+    'alerts': 'Low-memory /compact warnings',
+}
+PRESETS = {
+    'minimal':  {'model', 'context', 'alerts'},
+    'standard': {'app', 'branch', 'model', 'context', 'tasks', 'flags', 'mood', 'animation', 'heart', 'alerts'},
+    'full':     set(PARTS),
+}
+PRESET_DESC = {
+    'minimal': 'Just the model and the memory bar',
+    'standard': 'Project, branch, model, memory bar, tasks, and the fun row (default)',
+    'full': 'Everything: GitHub and PR, tokens, cost, time, organization and more',
+}
+LEGACY = {'github': 'show_github', 'tasks': 'show_tasks', 'org': 'show_org', 'mood': 'show_mood',
+          'flags': 'show_flags', 'alerts': 'compact_alert'}
+
+
+def part_on(cfg, name):
+    """Is this piece of the status line switched on? Preset first, then per-piece overrides."""
+    over = cfg.get('parts') or {}
+    base = PRESETS.get(cfg.get('preset', 'standard'), PRESETS['standard'])
+    on = bool(over[name]) if name in over else (name in base)
+    if on and LEGACY.get(name) and cfg.get(LEGACY[name]) is False:
+        on = False
+    if on and name in ('org', 'flags', 'mood', 'animation', 'heart') and cfg.get('fun_line') is False:
+        on = False
+    if on and name in ('animation', 'heart') and cfg.get('animate') is False:
+        on = False
+    return on
+
+
 # ---------------------------------------------------------------- fun line pieces
 BEAT = [0, 0, 1, 0, 0, 7, 2, 0, 2, 0]   # P wave, QRS spike, T wave
 LEVELS = '▁▂▃▄▅▆▇█'
@@ -344,6 +384,36 @@ def cli(argv):
         else:
             print('Unknown sprite. Run: statusline.py sprite   (shows the full list)')
             return 1
+    elif cmd == 'preset':
+        if len(argv) < 3 or argv[2] not in PRESETS:
+            print('Presets (pick how much you want on the line):')
+            for n in ('minimal', 'standard', 'full'):
+                print(f'  {n.ljust(9)} {PRESET_DESC[n]}')
+            print(f"\nCurrent: {cfg.get('preset', 'standard')}")
+            return 0 if len(argv) < 3 else 1
+        cfg['preset'], cfg['parts'] = argv[2], {}
+        print(f"Preset set to {argv[2]}: " + ', '.join(n for n in PARTS if n in PRESETS[argv[2]]))
+    elif cmd == 'parts':
+        if len(argv) < 3:
+            print(f"Preset: {cfg.get('preset', 'standard')}   (change a piece: statusline.py parts on|off <name> ...)\n")
+            for n in PARTS:
+                print(f"  {'✓' if part_on(cfg, n) else '·'} {n.ljust(10)} {PART_DESC[n]}")
+            return 0
+        if argv[2] not in ('on', 'off') or len(argv) < 4:
+            print('Usage: statusline.py parts on|off <name> [name ...]   (run `parts` to see names)')
+            return 1
+        names = [x.lower() for a in argv[3:] for x in re.split(r'[,\s]+', a) if x]
+        bad = [n for n in names if n not in PARTS]
+        if bad:
+            print('Unknown piece: ' + ', '.join(bad) + '\nValid: ' + ', '.join(PARTS))
+            return 1
+        over = cfg.get('parts') or {}
+        for n in names:
+            over[n] = (argv[2] == 'on')
+            if argv[2] == 'on' and LEGACY.get(n):
+                cfg.pop(LEGACY[n], None)          # clear an old off-switch so the new one wins
+        cfg['parts'] = over
+        print(f"{argv[2].upper()}: " + ', '.join(names))
     elif cmd == 'flags':
         if len(argv) < 3:
             cur = [x for x in (cfg.get('flags') or []) if x in ISO]
@@ -370,14 +440,18 @@ def cli(argv):
             if len(seen) > MAX_FLAGS:
                 print(f'Only the first {MAX_FLAGS} are used. Skipped: ' + ' '.join(seen[MAX_FLAGS:]))
     elif cmd == 'show':
-        level = argv[2] if len(argv) > 2 else ''
+        level = next((a for a in argv[2:] if a in ('low', 'warn', 'critical', 'dead')), '')
         rem_v = {'low': 12, 'warn': 25, 'critical': 6, 'dead': 2}.get(level, 59)
+        pre = next((a for a in argv[2:] if a in PRESETS), '')
         sample = {'session_id': 'preview', 'model': {'display_name': 'Claude Sonnet 5.5'},
                   'context_window': {'used_percentage': 100 - rem_v, 'remaining_percentage': rem_v,
-                                     'total_input_tokens': 8 * (100 - rem_v) * 100, 'total_output_tokens': 2000,
+                                     'total_input_tokens': (100 - rem_v) * 2000 - 2000, 'total_output_tokens': 2000,
                                      'context_window_size': 200000},
-                  'cost': {'total_cost_usd': 0.41, 'total_duration_ms': 1080000}, 'cwd': '/MyApp'}
-        env = dict(os.environ, COLUMNS='120', PYTHONUTF8='1')
+                  'cost': {'total_cost_usd': 0.41, 'total_duration_ms': 1080000}, 'cwd': '/MyApp',
+                  'pr': {'number': 31, 'review_state': 'approved'}}
+        env = dict(os.environ, COLUMNS='120', PYTHONUTF8='1', STATUSLINE_SAMPLE='1')
+        if pre:
+            env['STATUSLINE_PRESET'] = pre
         r = subprocess.run([sys.executable, os.path.abspath(__file__)], input=json.dumps(sample),
                            capture_output=True, text=True, encoding='utf-8', env=env)
         out = r.stdout if '--color' in argv else re.sub(r'\x1b\[[0-9;]*m', '', r.stdout)
@@ -413,17 +487,23 @@ def cli(argv):
         print(f'\n{__made_by__} v{__version__}')
         return 0
     else:
-        print('Commands: sprite [name] | flags [codes] | mood [emoji label] | org [name] | show [low] | confirm | set <key> <json> | preview | about')
+        print('Commands: preset [name] | parts [on|off names] | sprite [name] | flags [codes] | mood [emoji label] | org [name] | show [preset|low] | confirm | set <key> <json> | preview | about')
         return 1
     save_config(cfg)
     return 0
 
 
 if len(sys.argv) > 1:
-    sys.exit(cli(sys.argv))
+    try:
+        sys.exit(cli(sys.argv))
+    except BrokenPipeError:
+        sys.exit(0)
 
 # ---------------------------------------------------------------- main
 CFG = load_config()
+if os.environ.get('STATUSLINE_PRESET') in PRESETS:     # used by `show <preset>` to preview without saving
+    CFG['preset'], CFG['parts'] = os.environ['STATUSLINE_PRESET'], {}
+SAMPLE = os.environ.get('STATUSLINE_SAMPLE') == '1'     # `show` uses a made-up project so every piece can appear
 
 try:
     d = json.load(sys.stdin)
@@ -510,6 +590,18 @@ if cwd:
     except Exception:
         pass
 
+if SAMPLE:
+    gi = {'has_git': True, 'branch': 'feat/login', 'top': '/MyApp', 'added': 42, 'removed': 7,
+          'upstream': 'origin/feat/login', 'ahead': 2, 'behind': 0,
+          'host': 'github.com', 'owner': 'acme', 'name': 'myapp'}
+SAMPLE_TASKS = (
+    [{'id': str(i), 'subject': f'Task {i}', 'status': 'completed', 'parent': None} for i in (1, 2, 3)] +
+    [{'id': '4', 'subject': 'Build login form', 'status': 'in_progress', 'parent': None},
+     {'id': '41', 'subject': 'Layout', 'status': 'completed', 'parent': '4'},
+     {'id': '42', 'subject': 'Wire up validation', 'status': 'in_progress', 'parent': '4'},
+     {'id': '43', 'subject': 'Add tests', 'status': 'pending', 'parent': '4'}] +
+    [{'id': str(i), 'subject': f'Task {i}', 'status': 'pending', 'parent': None} for i in (5, 6, 7, 8)])
+
 # ---------- App name and phase
 cwd_lower = cwd.lower()
 folder = os.path.basename(cwd.rstrip('/')) if cwd else ''
@@ -543,7 +635,7 @@ phase_str = c(pcol + BOLD, f'{app}:{phase}')
 branch_str = ''
 if branch:
     branch_str = c(YELLOW + BOLD, branch)
-    if added or removed:
+    if (added or removed) and part_on(CFG, 'diff'):
         parts = []
         if added: parts.append(c(GREEN, f'+{added}'))
         if removed: parts.append(c(RED, f'-{removed}'))
@@ -569,7 +661,7 @@ def pr_lookup():
 
 
 github_str = ''
-if CFG.get('show_github', True) and gi.get('has_git'):
+if part_on(CFG, 'github') and gi.get('has_git'):
     if g_owner and g_name:
         label = f'{g_owner}/{g_name}' if 'github' in (g_host or 'github') else f'{g_host}:{g_owner}/{g_name}'
         github_str = c(WHITE, 'gh:') + c(CYAN, label)
@@ -698,8 +790,8 @@ def trunc(s, n):
 
 tasks_str = tasks_line2 = ''
 tp = d.get('transcript_path')
-if CFG.get('show_tasks', True) and tp:
-    items = tasks_cached(tp)
+if part_on(CFG, 'tasks') and (tp or SAMPLE):
+    items = [dict(t) for t in SAMPLE_TASKS] if SAMPLE else tasks_cached(tp)
     if items:
         parents, subs = split_tree(items)
         done = sum(1 for p in parents if p['status'] in STATUS_DONE)
@@ -792,44 +884,46 @@ if CFG.get('fun_line', True):
     w_track, w_ecg = (10, 8) if narrow else (16, 12)
     org = clean(CFG.get('org') or g_owner or '')
     pieces = []
-    if org and CFG.get('show_org', True):
+    if org and part_on(CFG, 'org'):
         pieces.append('🏢 ' + c(CYAN + BOLD, org))
-    if CFG.get('show_flags', True):
+    if part_on(CFG, 'flags'):
         fl = flags_segment(CFG, narrow)
         if fl: pieces.append(fl)
-    if CFG.get('show_mood', True):
+    if part_on(CFG, 'mood'):
         m = mood_segment(CFG)
         if m: pieces.append(m)
-    if CFG.get('animate', True):
+    if part_on(CFG, 'animation'):
         track = track_segment(pick_sprite(CFG, sid), pos, w_track, active, dead, CFG)
         if not (CFG.get('sprite_chosen') or CFG.get('setup_done')) and CFG.get('fav_reminder', True):
             track += ' ' + c(DIM + WHITE, '🎬?')   # nudge: run /statusline to pick a favorite animation
         pieces.append(track)
+    if part_on(CFG, 'heart'):
         pieces.append(heart_segment(health, w_ecg, int(now * 2)))
     fun_line = c(DIM + WHITE, ' | ').join(pieces)
 
 # ---------- Assemble
 SEP = c(DIM + WHITE, ' | ')
-line1 = [phase_str]
-if branch_str: line1.append(branch_str)
+line1 = []
+if part_on(CFG, 'app'): line1.append(phase_str)
+if branch_str and part_on(CFG, 'branch'): line1.append(branch_str)
 if github_str: line1.append(github_str)
-line1.append(c(MAGENTA + BOLD, model))
-line1.append(ctx_bar)
-for s in (tok_str, cost_str, time_str, memory_str):
-    if s: line1.append(s)
+if tasks_str and not CFG.get('two_lines', True): line1.append(tasks_str)
+if part_on(CFG, 'model'): line1.append(c(MAGENTA + BOLD, model))
+if part_on(CFG, 'context'): line1.append(ctx_bar)
+for name, val in (('tokens', tok_str), ('cost', cost_str), ('time', time_str)):
+    if val and part_on(CFG, name): line1.append(val)
+if memory_str: line1.append(memory_str)
 
 lines = []
-if CFG.get('two_lines', True):
+if line1:
     lines.append(SEP.join(line1))
+if CFG.get('two_lines', True):
     row2 = [x for x in (tasks_str, tasks_line2) if x]
     if row2:
         lines.append(SEP.join(row2))
-else:
-    if tasks_str: line1.insert(3 if github_str else 2, tasks_str)
-    lines.append(SEP.join(line1))
 if fun_line:
     lines.append(fun_line)
-if CFG.get('compact_alert', True):
+if part_on(CFG, 'alerts'):
     al = alert_line(rem, time.time(), sid)
     if al:
         lines.append(al)
