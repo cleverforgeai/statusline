@@ -19,7 +19,7 @@ import sys, json, subprocess, os, re, datetime, time, hashlib, math
 
 __author__ = 'CleverForge'
 __org__ = 'CleverForgeAI'
-__version__ = '1.1.0'
+__version__ = '1.2.0'
 __repo__ = 'github.com/cleverforgeai/statusline'
 __made_by__ = 'Made by CleverForge'
 
@@ -67,6 +67,66 @@ SPRITES = {
 }
 # Anything else: `sprite custom <emoji>` uses your own emoji as the sprite.
 CUSTOM_FILL = ['·']
+
+
+# ---------------------------------------------------------------- flags
+ISO = set(('AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ '
+           'CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR '
+           'GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP '
+           'KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT '
+           'MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW '
+           'SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG '
+           'UM US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW EU UN').split())
+MAX_FLAGS = 10
+
+
+def flag(code):
+    return ''.join(chr(0x1F1E6 + ord(ch) - 65) for ch in code)
+
+
+def flags_segment(cfg, narrow):
+    codes = [str(x).upper() for x in (cfg.get('flags') or []) if str(x).upper() in ISO][:MAX_FLAGS]
+    if not codes:
+        return ''
+    cap = 5 if narrow else MAX_FLAGS
+    shown = ''.join(flag(x) for x in codes[:cap])
+    more = len(codes) - cap
+    return shown + (c(DIM + WHITE, f' +{more}') if more > 0 else '')
+
+
+# ---------------------------------------------------------------- compact alerts
+ALERTS = {
+    'warn': ["🧳 Start packing: you'll need to /compact soon",
+             '⏳ Memory is filling up... /compact soon',
+             '🧹 Tidy-up time is coming: /compact soon',
+             '🍿 Fun fact: a /compact is on the horizon'],
+    'urgent': ['🚨 Almost full! Run /compact before the next big task',
+               '🫠 Brain getting heavy... /compact please',
+               '🎒 The bag is nearly full: time to /compact'],
+    'critical': ['🆘 COMPACT NOW or Claude starts forgetting things!',
+                 '💥 Memory almost gone: /compact or /clear, right now',
+                 '🔔 FINAL CALL: /compact'],
+    'dead': ['💔 Flatlined. /compact to revive, or /clear to start fresh'],
+}
+
+
+def alert_line(rem, now, sid):
+    """Fun nudge when context is running low. Rotates its message every few seconds."""
+    if rem is None or rem > 30:
+        return ''
+    level = 'dead' if rem <= 3 else 'critical' if rem <= 8 else 'urgent' if rem <= 15 else 'warn'
+    msgs = ALERTS[level]
+    seed = int(md5(sid).hexdigest(), 16) % 97
+    msg = msgs[(int(now // 8) + seed) % len(msgs)]
+    if level == 'warn':
+        col = YELLOW
+    elif level == 'urgent':
+        col = ORANGE + BOLD
+    elif level == 'critical':
+        col = (RED + BOLD) if int(now) % 2 == 0 else (DIM + RED)   # blinks
+    else:
+        col = DIM + RED
+    return c(col, msg)
 
 
 def get_sprite(name, cfg):
@@ -284,6 +344,49 @@ def cli(argv):
         else:
             print('Unknown sprite. Run: statusline.py sprite   (shows the full list)')
             return 1
+    elif cmd == 'flags':
+        if len(argv) < 3:
+            cur = [x for x in (cfg.get('flags') or []) if x in ISO]
+            print('Flags: ' + (''.join(flag(x) for x in cur) + '  ' + ' '.join(cur) if cur else '(none)'))
+            print(f'Usage: statusline.py flags US PR IT     (2-letter country codes, up to {MAX_FLAGS})')
+            print('       statusline.py flags clear')
+            return 0
+        if argv[2].lower() in ('clear', 'none', 'off'):
+            cfg['flags'] = []
+            print('Flags cleared')
+        else:
+            codes = [x.upper() for a in argv[2:] for x in re.split(r'[,\s]+', a) if x]
+            bad = [x for x in codes if x not in ISO]
+            if bad:
+                print('Not a valid 2-letter country code: ' + ', '.join(bad))
+                return 1
+            seen = []
+            for x in codes:
+                if x not in seen:
+                    seen.append(x)
+            cfg['flags'] = seen[:MAX_FLAGS]
+            cfg['show_flags'] = True
+            print('Flags set: ' + ''.join(flag(x) for x in cfg['flags']) + '  ' + ' '.join(cfg['flags']))
+            if len(seen) > MAX_FLAGS:
+                print(f'Only the first {MAX_FLAGS} are used. Skipped: ' + ' '.join(seen[MAX_FLAGS:]))
+    elif cmd == 'show':
+        level = argv[2] if len(argv) > 2 else ''
+        rem_v = {'low': 12, 'warn': 25, 'critical': 6, 'dead': 2}.get(level, 59)
+        sample = {'session_id': 'preview', 'model': {'display_name': 'Claude Sonnet 5.5'},
+                  'context_window': {'used_percentage': 100 - rem_v, 'remaining_percentage': rem_v,
+                                     'total_input_tokens': 8 * (100 - rem_v) * 100, 'total_output_tokens': 2000,
+                                     'context_window_size': 200000},
+                  'cost': {'total_cost_usd': 0.41, 'total_duration_ms': 1080000}, 'cwd': '/MyApp'}
+        env = dict(os.environ, COLUMNS='120', PYTHONUTF8='1')
+        r = subprocess.run([sys.executable, os.path.abspath(__file__)], input=json.dumps(sample),
+                           capture_output=True, text=True, encoding='utf-8', env=env)
+        out = r.stdout if '--color' in argv else re.sub(r'\x1b\[[0-9;]*m', '', r.stdout)
+        print(out if out.strip() else (r.stderr or 'No output'))
+        return 0
+    elif cmd == 'confirm':
+        cfg['setup_done'] = True
+        cfg['sprite_chosen'] = True
+        print('Setup confirmed. Your status line is ready.')
     elif cmd == 'org':
         cfg['org'] = ' '.join(argv[2:])
         print(f"Organization set to {cfg['org'] or '(auto from GitHub owner)'}")
@@ -310,7 +413,7 @@ def cli(argv):
         print(f'\n{__made_by__} v{__version__}')
         return 0
     else:
-        print('Commands: mood [emoji label] | sprite [name] | org [name] | set <key> <json> | preview | about')
+        print('Commands: sprite [name] | flags [codes] | mood [emoji label] | org [name] | show [low] | confirm | set <key> <json> | preview | about')
         return 1
     save_config(cfg)
     return 0
@@ -691,12 +794,15 @@ if CFG.get('fun_line', True):
     pieces = []
     if org and CFG.get('show_org', True):
         pieces.append('🏢 ' + c(CYAN + BOLD, org))
+    if CFG.get('show_flags', True):
+        fl = flags_segment(CFG, narrow)
+        if fl: pieces.append(fl)
     if CFG.get('show_mood', True):
         m = mood_segment(CFG)
         if m: pieces.append(m)
     if CFG.get('animate', True):
         track = track_segment(pick_sprite(CFG, sid), pos, w_track, active, dead, CFG)
-        if not CFG.get('sprite_chosen') and CFG.get('fav_reminder', True):
+        if not (CFG.get('sprite_chosen') or CFG.get('setup_done')) and CFG.get('fav_reminder', True):
             track += ' ' + c(DIM + WHITE, '🎬?')   # nudge: run /statusline to pick a favorite animation
         pieces.append(track)
         pieces.append(heart_segment(health, w_ecg, int(now * 2)))
@@ -723,5 +829,9 @@ else:
     lines.append(SEP.join(line1))
 if fun_line:
     lines.append(fun_line)
+if CFG.get('compact_alert', True):
+    al = alert_line(rem, time.time(), sid)
+    if al:
+        lines.append(al)
 
 sys.stdout.buffer.write('\n'.join(lines).encode('utf-8'))

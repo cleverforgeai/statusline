@@ -4,90 +4,72 @@ author: CleverForge
 metadata:
   made_by: CleverForge
   source: github.com/cleverforgeai/statusline
-description: Install, check, or adjust the Claude Code status line (phase, branch, GitHub repo and PR, task and subtask progress, organization, mood of the day, animated sprite, heart-line life meter, model, context, cost). Use when the user types /statusline, asks to set or change their favorite animation, mood, sprite or organization, or wants to set up or fix the status line. On a first run, ask the user for their favorite animation.
+description: Guided setup for the Claude Code status line. Use when the user types /statusline, or asks to set up, change or fix their status line, favorite animation, country flags, mood, organization or compact alerts. Asks a few quick questions, applies the answers, shows a preview, and asks the user to confirm.
 ---
 
-# Status line
+# Status line setup
 
-Made by CleverForge (github.com/CleverForgeAI). Run `python3 ~/.claude/statusline.py about` to see the installed version.
+Made by CleverForge (github.com/cleverforgeai/statusline).
 
-Files in `~/.claude/`:
-- `statusline.py`: all the logic and a small CLI.
-- `statusline-command.sh`: wrapper that Claude Code calls.
-- `statusline.config.json`: options.
-- `settings.json`: has the `statusLine` entry, including `"refreshInterval": 1`. The animation needs that timer.
+The user should never have to read docs or edit files. You ask, they answer, you apply it and show the result.
 
-Run the CLI with `python3 ~/.claude/statusline.py <command>` (use `python` on Windows).
+CLI: `python3 ~/.claude/statusline.py <command>` (use `python` on Windows). Run the commands yourself.
 
-## When invoked
+## 1. Check the install
 
-1. Check the install: the files above exist and `settings.json` points `statusLine.command` at `statusline-command.sh`.
-2. If anything is missing, give the installer:
-   - macOS, Linux, Git Bash: `gh repo clone cleverforgeai/statusline && cd statusline && STATUSLINE_LOCAL="$PWD" bash install.sh`
-   - Windows PowerShell: `gh repo clone cleverforgeai/statusline; cd statusline; $env:STATUSLINE_LOCAL=$PWD; .\install.ps1`
-3. Test: `echo '{"model":{"display_name":"Claude Sonnet"},"context_window":{"remaining_percentage":59},"cwd":"<repo path>"}' | bash ~/.claude/statusline-command.sh`. Confirm three lines of output at most and no Python errors.
-4. Tell the user to open a new session after changes to `settings.json`.
-5. Read `~/.claude/statusline.config.json`. If `sprite_chosen` is not `true`, run the favorite animation flow below before anything else. The status line also shows a small `🎬?` next to the sprite until a favorite is picked.
+Make sure `~/.claude/statusline.py`, `~/.claude/statusline-command.sh` and a `statusLine` entry in `~/.claude/settings.json` exist. If not, tell the user to run the installer from a clone of the repo:
 
-## Favorite animation
+- macOS, Linux, Git Bash: `gh repo clone cleverforgeai/statusline && cd statusline && STATUSLINE_LOCAL="$PWD" bash install.sh`
+- Windows PowerShell: `gh repo clone cleverforgeai/statusline; cd statusline; $env:STATUSLINE_LOCAL=$PWD; .\install.ps1`
 
-Ask the user what their favorite animation is, then put it in the line.
+Never overwrite other keys in `settings.json`. If a different `statusLine` already exists, show it and ask before replacing.
 
-1. Ask "What's your favorite animation?" with AskUserQuestion. Offer four options: 🚗 car, 🦋 butterfly, 🐈 cat chasing a mouse, 🚀 rocket. The user can pick "Other" to type any name or any emoji. If they want to browse first, run `python3 ~/.claude/statusline.py sprite` and show them the list (24 animations plus `random` and `custom`).
-2. Set it:
-   - A name from the list: `python3 ~/.claude/statusline.py sprite <name>` (cat, shark, pacman, snail, ball, dancer and so on).
-   - An emoji that belongs to a listed animation (for example 🐌): use that animation's name.
-   - Any other emoji or word they like (for example 🐙): `python3 ~/.claude/statusline.py sprite custom 🐙`. One emoji only.
-   - "Surprise me": `python3 ~/.claude/statusline.py sprite random`.
-3. Confirm in one line what was set. Say it moves while Claude is working and rests with 💤 when idle, and that the change shows up within a second or on the next update.
-4. Then offer to set today's mood (see below).
+## 2. Pick the path
 
+Read `~/.claude/statusline.config.json`.
 
-## Mood of the day
+- `setup_done` is not `true`: run the **guided setup** below.
+- `setup_done` is `true`: ask with AskUserQuestion what to change (Animation, Flags, Mood, Organization, Alerts, Start over). Do only that part, then step 4.
 
-When the user asks for `/statusline mood` or says how they feel:
-1. Ask "How are you feeling today?" with AskUserQuestion. Offer 😄 great, 😴 tired, 🔥 on fire, 🎯 focused. The user can type any other emoji or word.
-2. Run `python3 ~/.claude/statusline.py mood <emoji> <label>`. Full list: `python3 ~/.claude/statusline.py mood`.
-3. The mood is stamped with today's date. Tomorrow the line shows `🙂?` until a new one is set. Turn the reminder off with `set mood_reminder false`.
+## 3. Guided setup
 
-## Other commands
+Keep it short and friendly. One AskUserQuestion call with these four questions:
 
-- `sprite`: list every animation. `sprite <name>`: choose one. `sprite random`: a different one per session. `sprite custom <emoji>`: use your own emoji.
-- `org "<name>"`: set the organization name. Empty string goes back to the GitHub owner.
-- `set <key> <json>`: change any option, e.g. `set life_source "lowest"` or `set fun_line false`.
-- `preview`: print every sprite and the heart line at different life levels.
+1. **Favorite animation?** Options: 🚗 car, 🦋 butterfly, 🐈 cat chasing a mouse, 🚀 rocket. "Other" lets them type any name or emoji.
+2. **How are you feeling today?** Options: 😄 great, 😴 tired, 🔥 on fire, 🎯 focused. "Other" for anything else.
+3. **Organization name?** Options: use my GitHub name, hide it. "Other" to type a name.
+4. **Fun "time to /compact" warnings when memory runs low?** Options: yes (recommended), no.
 
-## Config keys
+Then ask in plain chat, as a separate message: **"Which countries' flags do you want on your line? Name up to 10, or say skip."** Wait for the answer.
 
-| Key | Default | Meaning |
-|---|---|---|
-| `apps` | `{}` | Folder keyword to display name. |
-| `org` | `""` | Organization name. Blank uses the GitHub owner. Claude Code does not send an account or organization name. |
-| `show_org`, `show_mood`, `show_github`, `show_tasks`, `show_memory` | on, on, on, on, off | Turn segments on or off. |
-| `memory_file` | none | MEMORY.md path for `show_memory`. |
-| `fun_line` | `true` | The third line (organization, mood, sprite, heart). |
-| `animate` | `true` | Sprite and heart line. |
-| `sprite` | `car` | Animation name, `random` (stable per session) or `custom`. |
-| `custom_emoji` | none | The emoji used when `sprite` is `custom`. |
-| `sprite_chosen` | `false` | Set to `true` once the user has picked a favorite. While `false`, a `🎬?` hint shows. |
-| `fav_reminder` | `true` | Show the `🎬?` hint until a favorite is chosen. |
-| `life_source` | `context` | What the heart tracks: `context` (remaining context), `five_hour` (plan limit, subscribers only), or `lowest`. |
-| `active_seconds` | `8` | How long the sprite keeps moving after the last change. |
-| `two_lines` | `true` | Tasks on their own line. |
-| `use_gh` | `true` | Fall back to the `gh` CLI for the PR when Claude Code does not send one. |
+Apply the answers:
 
-## How it behaves
+| Answer | Command |
+|---|---|
+| Animation from the list | `sprite <name>`. Run `sprite` with no name to see all 24. An emoji that matches one (🐌) uses that name |
+| Any other emoji or word | `sprite custom <emoji>` (one emoji) |
+| "Surprise me" | `sprite random` |
+| Mood | `mood <emoji> <label>` |
+| GitHub name | `org ""` and `set show_org true` |
+| A typed name | `org "<name>"` and `set show_org true` |
+| Hide organization | `set show_org false` |
+| Flags | `flags US PR IT`. Convert country names to 2-letter codes yourself. Max 10; if they name more, use the first 10 and say which were skipped. "Skip" means `flags clear` |
+| Alerts | `set compact_alert true` or `set compact_alert false` |
 
-- The sprite moves while tokens, cost or the transcript change. When nothing changes for `active_seconds` it stops and shows 💤.
-- The heart line is an ECG. It scrolls with the timer, spikes shrink as life drops, beats start to skip under 30%, and it flatlines at 3% or less. The sprite becomes 🪫 and the heart becomes 💔.
-- Life is context remaining by default, so it refills after `/compact` or `/clear`.
-- Animation is about one frame per second, because Claude Code re-runs the script at most on its timer and debounces updates at 300ms.
+## 4. Show and confirm
 
-## Tasks and subtasks
+Run `python3 ~/.claude/statusline.py show` and put its output in a code block so the user sees their line. Then ask with AskUserQuestion: **"Does this look right?"** Options: "Looks great", "Change something".
 
-Claude Code tasks have no parent field. A task shows as a subtask when its metadata has `parent` set to the parent task id, or its subject reads `Parent subject > Child subject`. Use one of those forms when creating tasks.
+- "Looks great": run `confirm`. Say it is saved, and that if the status line does not appear at the bottom they should open a new Claude Code session.
+- "Change something": ask which part, redo only that part, show again.
 
-## Rules
+Offer once, in one line, to preview the low-memory warning with `show low`.
 
-- Never overwrite other keys in `settings.json`. Merge only `statusLine`.
-- If a different `statusLine` exists, show it to the user and ask before replacing.
+## Notes to keep honest
+
+- The animation moves while Claude is working (about once a second) and rests with 💤 when idle.
+- Flags use emoji. Some Windows terminals draw them as letter pairs like `US`. If so, say so and offer `flags clear`.
+- The heart line and warnings follow remaining context. `/compact` or `/clear` frees it and the heart recovers.
+- Claude Code sends no organization or account name, which is why the organization comes from GitHub or what the user types.
+- Never edit `statusline.config.json` by hand when a command exists. Use `set <key> <json>` for any other option.
+- Full list of options: docs/REFERENCE.md in the repo.

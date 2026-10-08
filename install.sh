@@ -46,6 +46,9 @@ fetch "skill/SKILL.md" "$DEST/skills/statusline/SKILL.md"
   "animate": true,
   "sprite": "car",
   "sprite_chosen": false,
+  "setup_done": false,
+  "flags": [],
+  "compact_alert": true,
   "fav_reminder": true,
   "org": "",
   "life_source": "context"
@@ -77,5 +80,5 @@ PYEOF
 
 echo "Statusline Kit installed. Made by CleverForge."
 echo "Restart Claude Code (or open a new session) to see the status line."
-echo "Then type /statusline: Claude will ask for your favorite animation and your mood."
+echo "Last step: open Claude Code and type /statusline. Claude asks a few quick questions and sets it all up."
 echo "Edit $DEST/statusline.config.json to name your apps. Run /statusline in Claude Code to adjust."

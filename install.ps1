@@ -32,7 +32,7 @@ Get-Remote 'skill/SKILL.md' (Join-Path $Dest 'skills\statusline\SKILL.md')
 
 $cfg = Join-Path $Dest 'statusline.config.json'
 if (-not (Test-Path $cfg)) {
-  [System.IO.File]::WriteAllText($cfg, '{ "apps": {}, "show_github": true, "show_tasks": true, "show_memory": false, "two_lines": true, "fun_line": true, "animate": true, "sprite": "car", "sprite_chosen": false, "fav_reminder": true, "org": "", "life_source": "context" }', (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::WriteAllText($cfg, '{ "apps": {}, "show_github": true, "show_tasks": true, "show_memory": false, "two_lines": true, "fun_line": true, "animate": true, "sprite": "car", "sprite_chosen": false, "setup_done": false, "flags": [], "compact_alert": true, "fav_reminder": true, "org": "", "life_source": "context" }', (New-Object System.Text.UTF8Encoding($false)))
 }
 
 $cmd = 'bash ' + ($Dest -replace '\\','/') + '/statusline-command.sh'
@@ -45,5 +45,5 @@ if ($json.PSObject.Properties.Name -contains 'statusLine') { $json.statusLine = 
 
 Write-Host 'Statusline Kit installed. Made by CleverForge.'
 Write-Host 'Restart Claude Code (or open a new session) to see the status line.'
-Write-Host 'Then type /statusline: Claude will ask for your favorite animation and your mood.'
+Write-Host 'Last step: open Claude Code and type /statusline. Claude asks a few quick questions and sets it all up.'
 Write-Host "Edit $cfg to name your apps. Run /statusline in Claude Code to adjust."
